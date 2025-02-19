@@ -113,6 +113,7 @@
 			<Template>ПланыВидовХарактеристик</Template>
 			<Template>ПланыСчетов</Template>
 			<Template>РегистрБухгалтерии</Template>
+			<Template>Товары</Template>
 			<Template>ДокументТМЦ</Template>
 		</ChildObjects>
 	</ExternalDataProcessor>
