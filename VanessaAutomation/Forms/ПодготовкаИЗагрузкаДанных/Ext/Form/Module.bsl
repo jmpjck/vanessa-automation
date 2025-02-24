@@ -54,6 +54,67 @@ Function ПолучитьМакетОбработки(Val TemplateName) Export
 	Return GetTemplateAtServer(TemplateName);
 EndFunction
 
+&AtServer
+Procedure SetAttributTypes()
+	
+	TypesArray = New Array;
+	
+	MetadataTypeMap = GetMetadataTypeMap();
+	
+	For Each MetadataTypeItem In MetadataTypeMap Do
+		For Each MetadataObj In Metadata[MetadataTypeItem.Key] Do
+			TypesArray.add(StrTemplate("%1.%2", MetadataTypeItem.Value, MetadataObj.Name));	
+		EndDo;
+	EndDo;
+	
+	DataRefsTypeRestriction = New TypeDescription(StrConcat(TypesArray, ","));
+	
+	Items.DataRefsRef.TypeRestriction = DataRefsTypeRestriction;
+	
+EndProcedure
+
+&AtServer
+Function GetMetadataTypeMap()
+	
+	MetadataTypeMap = New Map;
+	
+	MetadataTypeMap.Insert("Catalogs",  "CatalogRef");
+	MetadataTypeMap.Insert("Documents", "DocumentRef");
+	MetadataTypeMap.Insert("ChartsOfCharacteristicTypes", "ChartOfCharacteristicTypesRef");
+	MetadataTypeMap.Insert("ChartsOfAccounts", "ChartOfAccountsRef");
+
+	Return MetadataTypeMap;
+	
+EndFunction   
+
+// Проверяет, является ли строка уникальным идентификатором.
+// В качестве уникального идентификатора предполагается строка вида
+// "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX", где X = [0..9,a..f].
+//
+// Параметры:
+//  ИдентификаторСтрока - Строка - проверяемая строка.
+//
+// Возвращаемое значение:
+//  Булево - Истина, если переданная строка является уникальным идентификатором.
+&AtServer
+Функция ЭтоУникальныйИдентификатор(Знач Строка)
+	
+	Шаблон = "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX";
+	
+	Если СтрДлина(Шаблон) <> СтрДлина(Строка) Тогда
+		Возврат Ложь;
+	КонецЕсли;
+	Для Позиция = 1 По СтрДлина(Строка) Цикл
+		Если КодСимвола(Шаблон, Позиция) = 88 И ((КодСимвола(Строка, Позиция) < 48 Или КодСимвола(Строка, Позиция) > 57) И (КодСимвола(Строка, Позиция) < 97 Или КодСимвола(Строка, Позиция) > 102))
+			Или КодСимвола(Шаблон, Позиция) = 45 И КодСимвола(Строка, Позиция) <> 45 Тогда
+			Возврат Ложь;
+		КонецЕсли;
+	КонецЦикла;
+	
+	Возврат Истина;
+
+КонецФункции
+
 #EndRegion
 
 #Region WorkWithScenarious
@@ -117,12 +178,29 @@ Procedure IRunDatabaseCleanAtServer()
 	
 EndProcedure
 
+#Region Catalog
+
 &AtClient
 Procedure ICheckOrCreateCatalogObjects(Val ObjectName, Val Values) Export
 	If Not Values.Count() Then
 		Return;
 	EndIf;
-	ICheckOrCreateCatalogObjectsAtServer(ObjectName, Values, False);
+	
+	Files = FilesToUpload(Values);
+	
+	If Files.Count() > 0 Then
+		
+	    Vanessa.ЗапретитьВыполнениеШагов();
+		AddParams = New Structure("Object, Name, Values, LoadTrue", "Catalog", ObjectName, Values, False);
+		Notify = New NotifyDescription("UploadBinaryDataContinuation", ThisForm, AddParams);
+		BeginPuttingFiles(Notify, Files, , False, ThisForm.UUID);
+		
+	Else
+		
+		ICheckOrCreateCatalogObjectsAtServer(ObjectName, Values, False);
+		
+	EndIf;
+	
 EndProcedure
 
 &AtClient
@@ -135,7 +213,21 @@ Procedure ICheckOrCreateCatalogObjectsWithDataExchangeLoadTrue(Val ObjectName, V
 	If Not Values.Count() Then
 		Return;
 	EndIf;
-	ICheckOrCreateCatalogObjectsAtServer(ObjectName, Values, True);
+	
+	Files = FilesToUpload(Values);
+	
+	If Files.Count() > 0 Then
+	    Vanessa.ЗапретитьВыполнениеШагов();
+		AddParams = New Structure("Object, Name, Values, LoadTrue", "Catalog", ObjectName, Values, True);
+		Notify = New NotifyDescription("UploadBinaryDataContinuation", ThisForm, AddParams);
+		BeginPuttingFiles(Notify, Files, , False, ThisForm.UUID);
+		
+	Else
+		
+		ICheckOrCreateCatalogObjectsAtServer(ObjectName, Values, True);
+		
+	EndIf;
+	
 EndProcedure
 
 &AtClient
@@ -203,16 +295,155 @@ Procedure ICheckOrCreateCatalogObjectsAtServer(ObjectName, Values, DataExchange 
 			Obj.SetNewCode();
 		EndIf;
 		Obj.DataExchange.Load = DataExchange;
-		Obj.Write();
+		TryToWriteObject(Obj, 4);
 	EndDo;
 EndProcedure
+
+#EndRegion
+
+#Region ChartOfAccounts
+
+&AtClient
+Procedure ICheckOrCreateChartOfAccountsObjects(Val ObjectName, Val Values) Export
+	If Not Values.Count() Then
+		Return;
+	EndIf;
+	
+	Files = FilesToUpload(Values);
+	
+	If Files.Count() > 0 Then
+		
+	    Vanessa.ЗапретитьВыполнениеШагов();
+		AddParams = New Structure("Object, Name, Values, LoadTrue", "ChartOfAccounts", ObjectName, Values, False);
+		Notify = New NotifyDescription("UploadBinaryDataContinuation", ThisForm, AddParams);
+		BeginPuttingFiles(Notify, Files, , False, ThisForm.UUID);
+		
+	Else
+		
+		ICheckOrCreateChartOfAccountsObjectsAtServer(ObjectName, Values, False);
+		
+	EndIf;
+	
+EndProcedure
+
+&AtClient
+Procedure ЯПроверяюИлиСоздаюДляПланаСчетовОбъекты(Val ИмяОбъекта, Val Значения) Export
+	ICheckOrCreateChartOfAccountsObjects(ИмяОбъекта, Значения);
+EndProcedure
+
+&AtClient
+Procedure ICheckOrCreateChartOfAccountsObjectsWithDataExchangeLoadTrue(Val ObjectName, Val Values) Export
+	If Not Values.Count() Then
+		Return;
+	EndIf;
+	
+	Files = FilesToUpload(Values);
+	
+	If Files.Count() > 0 Then
+	    Vanessa.ЗапретитьВыполнениеШагов();
+		AddParams = New Structure("Object, Name, Values, LoadTrue", "ChartOfAccounts", ObjectName, Values, True);
+		Notify = New NotifyDescription("UploadBinaryDataContinuation", ThisForm, AddParams);
+		BeginPuttingFiles(Notify, Files, , False, ThisForm.UUID);
+		
+	Else
+		
+		ICheckOrCreateChartOfAccountsObjectsAtServer(ObjectName, Values, True);
+		
+	EndIf;
+	
+EndProcedure
+
+&AtClient
+Procedure ЯПроверяюИлиСоздаюДляПланаСчетовОбъектыСОбменДаннымиЗагрузкаИстина(Val ИмяОбъекта, Val Значения) Export
+	ICheckOrCreateChartOfAccountsObjectsWithDataExchangeLoadTrue(ИмяОбъекта, Значения);
+EndProcedure
+
+&AtServer
+Procedure ICheckOrCreateChartOfAccountsObjectsAtServer(ObjectName, Values, DataExchange = True)
+	ObjectValues = GetValueTableFromVanessaTableArray(Values);
+	ObjectAttributes = New ValueTable;
+	FillColumnsByStandardAttributes(ObjectAttributes, "ChartsOfAccounts", ObjectName);
+	FillColumnsByCommonAttributes(ObjectAttributes, "ChartsOfAccounts", ObjectName);
+	FillColumnsByAttributes(ObjectAttributes, "ChartsOfAccounts", ObjectName);
+	FillColumnsByAccountingFlags(ObjectAttributes, "ChartsOfAccounts", ObjectName);
+	FillColumnsByExtDimensionAccountingFlag(ObjectAttributes, "ChartsOfAccounts", ObjectName);
+	ColumnsNames = New Array;
+	For Each Column In ObjectAttributes.Columns Do
+		If ObjectValues.Columns.Find(Column.Name) = Undefined Then
+			ColumnsNames.Add(Column.Name);
+		EndIf;
+	EndDo;
+	For Each ColumnName In ColumnsNames Do
+		ObjectAttributes.Columns.Delete(ColumnName);
+	EndDo;
+	RefColumnName = ?(ObjectAttributes.Columns.Find("Ref") <> Undefined, "Ref", "Ссылка");
+	For Each Row In ObjectValues Do
+		Ref = GetObjectLinkFromObjectURL(Row[RefColumnName]);
+		If ValueIsFilled(Ref.DataVersion) Then
+			Obj = Ref.GetObject();
+		Else
+			Predefined = StrFind(Row[RefColumnName], "?refName=");
+			If Predefined Then
+				Continue;
+			EndIf;
+			Obj = ChartsOfAccounts[ObjectName].CreateAccount();
+			Obj.SetNewObjectRef(Ref);
+		EndIf;		
+		
+		For Each Column In ObjectAttributes.Columns Do
+			If Row[Column.Name] = "" Then
+				Continue;
+			EndIf;
+			If Column.Name = RefColumnName Then
+				Continue;
+			EndIf;
+			If Column.Name = "IsFolder" Or Column.Name = "ЭтоГруппа" Then
+				Continue;
+			EndIf;
+			If (Column.Name = "DeletionMark" Or Column.Name = "ПометкаУдаления")
+				And Row[Column.Name] = "True" Then
+				Obj.DeletionMark = True;
+				Continue;
+			EndIf;
+			If Column.Name = "Type" Or Column.Name = "Тип" Then
+				Obj.Type = AccountType[StrReplace(Row[Column.Name], "/", "")];
+				Continue;
+			EndIf;
+			FillTipicalObjectAttributesByValues(Obj, Row, Column);
+		EndDo;
+		If Not ValueIsFilled(Obj.Code) Then
+			Obj.SetNewCode();
+		EndIf;
+		Obj.DataExchange.Load = DataExchange;
+		TryToWriteObject(Obj, 4);
+	EndDo;
+EndProcedure
+
+#EndRegion
+
+#Region Document
 
 &AtClient
 Procedure ICheckOrCreateDocumentObjects(Val ObjectName, Val Values) Export
 	If Not Values.Count() Then
 		Return;
 	EndIf;
-	ICheckOrCreateDocumentObjectsAtServer(ObjectName, Values);
+	
+	Files = FilesToUpload(Values);
+	
+	If Files.Count() > 0 Then
+		
+	    Vanessa.ЗапретитьВыполнениеШагов();
+		AddParams = New Structure("Object, Name, Values, LoadTrue", "Documents", ObjectName, Values, False);
+		Notify = New NotifyDescription("UploadBinaryDataContinuation", ThisForm, AddParams);
+		BeginPuttingFiles(Notify, Files, , False, ThisForm.UUID);
+		
+	Else
+		
+		ICheckOrCreateDocumentObjectsAtServer(ObjectName, Values);
+		
+	EndIf;
+	
 EndProcedure
 
 &AtClient
@@ -225,7 +456,22 @@ Procedure ICheckOrCreateDocumentObjectsWithDataExchangeLoadTrue(Val ObjectName, 
 	If Not Values.Count() Then
 		Return;
 	EndIf;
-	ICheckOrCreateDocumentObjectsAtServer(ObjectName, Values, True);
+	
+	Files = FilesToUpload(Values);
+	
+	If Files.Count() > 0 Then
+		
+	    Vanessa.ЗапретитьВыполнениеШагов();
+		AddParams = New Structure("Object, Name, Values, LoadTrue", "Documents", ObjectName, Values, True);
+		Notify = New NotifyDescription("UploadBinaryDataContinuation", ThisForm, AddParams);
+		BeginPuttingFiles(Notify, Files, , False, ThisForm.UUID);
+		
+	Else
+		
+		ICheckOrCreateDocumentObjectsAtServer(ObjectName, Values, True);
+		
+	EndIf;
+	
 EndProcedure
 
 &AtClient
@@ -300,6 +546,10 @@ Procedure ICheckOrCreateDocumentObjectsAtServer(ObjectName, Values, DataExchange
 	EndDo;
 EndProcedure
 
+#EndRegion
+
+#Region ChartOfCharacteristicType 
+
 &AtClient
 Procedure ICheckOrCreateChartOfCharacteristicTypesObjects(Val ObjectName, Val Values) Export
 	If Not Values.Count() Then
@@ -342,8 +592,21 @@ Procedure ICheckOrCreateChartOfCharacteristicTypesObjectsAtServer(ObjectName, Va
 	For Each ColumnName In ColumnsNames Do
 		ObjectAttributes.Columns.Delete(ColumnName);
 	EndDo;
+	
+	IsFolder = False;
+	FoundColumn = ObjectAttributes.Columns.Find("IsFolder");
+	If FoundColumn = Undefined Then
+		FoundColumn = ObjectAttributes.Columns.Find("ЭтоГруппа");	
+	EndIf;
+	
 	RefColumnName = ?(ObjectAttributes.Columns.Find("Ref") <> Undefined, "Ref", "Ссылка");
 	For Each Row In ObjectValues Do
+		If FoundColumn <> Undefined
+			And Row[FoundColumn.Name] = "True" Then
+			IsFolder = True;
+		Else
+			IsFolder = False;
+		EndIf;
 		Ref = GetObjectLinkFromObjectURL(Row[RefColumnName]);
 		If ValueIsFilled(Ref.DataVersion) Then
 			Obj = Ref.GetObject();
@@ -352,7 +615,11 @@ Procedure ICheckOrCreateChartOfCharacteristicTypesObjectsAtServer(ObjectName, Va
 			If Predefined Then
 				Continue;
 			EndIf;
-			Obj = ChartsOfCharacteristicTypes[ObjectName].CreateItem();
+			If IsFolder Then
+				Obj = ChartsOfCharacteristicTypes[ObjectName].CreateFolder();
+			Else
+				Obj = ChartsOfCharacteristicTypes[ObjectName].CreateItem();
+			EndIf;
 			Obj.SetNewObjectRef(Ref);
 		EndIf;		
 		
@@ -362,17 +629,59 @@ Procedure ICheckOrCreateChartOfCharacteristicTypesObjectsAtServer(ObjectName, Va
 			EndIf;
 			If Column.Name = RefColumnName Then
 				Continue;
+			EndIf; 
+			If Column.Name = "IsFolder" Or Column.Name = "ЭтоГруппа" Then
+				Continue;
 			EndIf;
 			If (Column.Name = "DeletionMark" Or Column.Name = "ПометкаУдаления")
 				And Row[Column.Name] = "True" Then
 				Obj.DeletionMark = True;
 				Continue;
 			EndIf;
-			FillTipicalObjectAttributesByValues(Obj, Row, Column);
+			If (Column.Name = "ValueType" Or Column.Name = "ТипЗначения") 
+				And Not IsFolder Then  
+				StartTmpl = "<TypeDescription xmlns=""http://v8.1c.ru/8.1/data/core"" xmlns:xs=""http://www.w3.org/2001/XMLSchema"" xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"">";
+                EndTmpl = "</TypeDescription>";
+                
+                ResultTypeDescription = Row[Column.Name];
+                If Not StrStartsWith(ResultTypeDescription, StartTmpl) Then 
+                    ResultTypeDescription = StartTmpl + ResultTypeDescription + EndTmpl;
+                EndIf;
+                
+                NewXMLReader = New XMLReader;
+                NewXMLReader.SetString(ResultTypeDescription);
+                Obj.ValueType = XDTOSerializer.ReadXML(NewXMLReader, Тип("ОписаниеТипов"));
+                NewXMLReader.Close();
+			Else
+				FillTipicalObjectAttributesByValues(Obj, Row, Column);
+			EndIf;
 		EndDo;
 		Obj.DataExchange.Load = DataExchange;
-		Obj.Write();
+		TryToWriteObject(Obj, 4);
 	EndDo;
+EndProcedure
+
+#EndRegion
+
+&AtServer
+Procedure TryToWriteObject(Obj, MaxCount, Count = 0)
+	If Count > MaxCount - 1 Then
+		Obj.Write();
+	Else
+		Try
+			Obj.Write();
+		Except
+			If Find(ErrorDescription(), "Lock conflict during the transaction") Then
+				Count = Count + 1;                     
+				DateStart = CurrentDate();
+				While DateStart + 1 > CurrentDate() Do
+				EndDo;
+				TryToWriteObject(Obj, MaxCount, Count);
+			Else
+				TryToWriteObject(Obj, MaxCount, MaxCount);
+			EndIf;
+		EndTry;                
+	EndIf;
 EndProcedure
 
 &AtClient
@@ -400,9 +709,16 @@ Procedure IRefillObjectTabularSectionAtServer(TabularSectionName, Values)
 	ObjectValues.Indexes.Add(RefColumnName);
 	ObjectsRefs = ObjectValues.Copy(, RefColumnName);
 	ObjectsRefs.GroupBy(RefColumnName);
-	ObjectAttributes = New ValueTable;
+	ObjectAttributes = New ValueTable;           
+	
 	Ref = GetObjectLinkFromObjectURL(ObjectValues[0][RefColumnName]);
-	FillColumnsByTabularSectionAttributes(ObjectAttributes, Ref.Metadata().TabularSections[TabularSectionName].Attributes);
+	TabularSectionName = TranslationList(TabularSectionName);
+	If Lower(TabularSectionName) = Lower("ExtDimensionTypes") Then
+		FillColumnsByTabularSectionAttributes(ObjectAttributes, Ref.Metadata().StandardTabularSections[TabularSectionName].StandardAttributes);
+	Else
+		FillColumnsByTabularSectionAttributes(ObjectAttributes, Ref.Metadata().TabularSections[TabularSectionName].Attributes);
+	EndIf;              
+	
 	ColumnsNames = New Array;
 	For Each Column In ObjectAttributes.Columns Do
 		If ObjectValues.Columns.Find(Column.Name) = Undefined Then
@@ -443,10 +759,26 @@ EndProcedure
 
 &AtClient
 Procedure ICheckOrCreateInformationRegisterRecords(Val RegisterName, Val Values) Export
+	
 	If Not Values.Count() Then
 		Return;
 	EndIf;
-	ICheckOrCreateInformationRegisterRecordsAtServer(RegisterName, Values, False, False);
+	
+	Files = FilesToUpload(Values);
+	
+	If Files.Count() > 0 Then
+		
+	    Vanessa.ЗапретитьВыполнениеШагов();
+		AddParams = New Structure("Object, Name, Values, LoadTrue, UseSet", "RegisterRecords", RegisterName, Values, False, False);
+		Notify = New NotifyDescription("UploadBinaryDataContinuation", ThisForm, AddParams);
+		BeginPuttingFiles(Notify, Files, , False, ThisForm.UUID);
+		
+	Else
+		
+		ICheckOrCreateInformationRegisterRecordsAtServer(RegisterName, Values, False, False);
+		
+	EndIf;
+		
 EndProcedure
 
 &AtClient
@@ -455,11 +787,55 @@ Procedure ЯПроверяюИлиСоздаюДляРегистраСведен
 EndProcedure
 
 &AtClient
+Procedure ICheckOrCreateInformationRegisterRecordsWithDataExchangeLoadTrue(Val RegisterName, Val Values) Export
+	
+	If Not Values.Count() Then
+		Return;
+	EndIf;
+	
+	Files = FilesToUpload(Values);
+	
+	If Files.Count() > 0 Then
+		
+	    Vanessa.ЗапретитьВыполнениеШагов();
+		AddParams = New Structure("Object, Name, Values, LoadTrue, UseSet", "RegisterRecords", RegisterName, Values, True, False);
+		Notify = New NotifyDescription("UploadBinaryDataContinuation", ThisForm, AddParams);
+		BeginPuttingFiles(Notify, Files, , False, ThisForm.UUID);
+		
+	Else
+		
+		ICheckOrCreateInformationRegisterRecordsAtServer(RegisterName, Values, True, True);
+		
+	EndIf;
+		
+EndProcedure
+
+&AtClient
+Procedure ЯПроверяюИлиСоздаюДляРегистраСведенийЗаписиСОбменДаннымиЗагрузкаИстина(Val ИмяРегистра, Val Значения) Export
+	ICheckOrCreateInformationRegisterRecordsWithDataExchangeLoadTrue(ИмяРегистра, Значения);
+EndProcedure
+
+&AtClient
 Procedure ICheckOrCreateInformationRegisterRecordsUsingRecordSets(Val RegisterName, Val Values) Export
 	If Not Values.Count() Then
 		Return;
 	EndIf;
-	ICheckOrCreateInformationRegisterRecordsAtServer(RegisterName, Values, True, False);
+	
+	Files = FilesToUpload(Values);
+	
+	If Files.Count() > 0 Then
+		
+	    Vanessa.ЗапретитьВыполнениеШагов();
+		AddParams = New Structure("Object, Name, Values, UseSet, LoadTrue", "RegisterRecords", RegisterName, Values, True, False);
+		Notify = New NotifyDescription("UploadBinaryDataContinuation", ThisForm, AddParams);
+		BeginPuttingFiles(Notify, Files, , False, ThisForm.UUID);
+		
+	Else
+		
+		ICheckOrCreateInformationRegisterRecordsAtServer(RegisterName, Values, True, False);
+		
+	EndIf;
+	
 EndProcedure
 
 &AtClient
@@ -472,7 +848,20 @@ Procedure ICheckOrCreateInformationRegisterRecordsUsingRecordSetsWithDataExchang
 	If Not Values.Count() Then
 		Return;
 	EndIf;
-	ICheckOrCreateInformationRegisterRecordsAtServer(RegisterName, Values, True, True);
+	Files = FilesToUpload(Values);
+	
+	If Files.Count() > 0 Then
+		
+	    Vanessa.ЗапретитьВыполнениеШагов();
+		AddParams = New Structure("Object, Name, Values, LoadTrue, UseSet", "RegisterRecords", RegisterName, Values, True, True);
+		Notify = New NotifyDescription("UploadBinaryDataContinuation", ThisForm, AddParams);
+		BeginPuttingFiles(Notify, Files, , False, ThisForm.UUID);
+		
+	Else
+		
+		ICheckOrCreateInformationRegisterRecordsAtServer(RegisterName, Values, True, True);
+		
+	EndIf;
 EndProcedure
 
 &AtClient
@@ -508,10 +897,8 @@ Procedure ICheckOrCreateInformationRegisterRecordsAtServer(RegisterName, Values,
 		MasterDimensions.Add(RecorderColumn.Name);		
 	ElsIf UseRecordSets Then
 		For Each Dimension In RegisterMetadata.Dimensions Do
-			If Dimension.Master Then
-				MasterDimensions.Add(Dimension.Name);
-			EndIf;			
-		EndDo;		
+			MasterDimensions.Add(Dimension.Name);
+		EndDo;
 		If RegisterMetadata.InformationRegisterPeriodicity <> Metadata.ObjectProperties.InformationRegisterPeriodicity.Nonperiodical Then
 			PeriodColumn = ObjectAttributes.Columns.Find("Period");
 			If PeriodColumn = Undefined Then
@@ -562,9 +949,6 @@ Procedure ICheckOrCreateInformationRegisterRecordsAtServer(RegisterName, Values,
 		For Each Row In ObjectValues Do
 			Obj = InformationRegisters[RegisterName].CreateRecordManager();
 			For Each Column In ObjectAttributes.Columns Do
-				//If Row[Column.Name] = "" Then
-				//	Continue;
-				//EndIf;
 				FillTipicalObjectAttributesByValues(Obj, Row, Column);
 			EndDo;
 			Obj.Write(True);
@@ -702,6 +1086,7 @@ EndProcedure
 Procedure OnCreateAtServer(Cancel, StandardProcessing)	
 	
 	MaxDownstreamDependenciesHierarchyLevel = 1;
+	SetAttributTypes();	
 	
 EndProcedure
 
@@ -760,6 +1145,38 @@ Procedure GenerateFeature(Command)
 	Feature.Очистить();
 	Feature.ДобавитьСтроку(GeneratedFeatureFile());
 	Items.GroupPages.CurrentPage = Items.GroupPageFeature;
+	
+	SaveBinData();
+	
+EndProcedure
+
+&AtClient
+Procedure SaveBinData()
+	
+	If FilesToSave.Count() = 0 Then
+		
+		Return;
+		
+	EndIf;
+	
+	Notify = New NotifyDescription("SaveBinaryDataContinuation", ThisForm);
+	List = New Array;
+	
+	For Each elem In FilesToSave Do
+		
+		List.Add(New TransferableFileDescription(elem.Presentation, elem.Value)); 
+		
+	EndDo;
+	
+	BeginGettingFiles(Notify, List, PathToUpload, False);
+	
+EndProcedure
+
+&AtCLient
+Procedure SaveBinaryDataContinuation(Files, AdditionalParameters) Export
+	
+	
+	
 EndProcedure
 
 &AtClient
@@ -767,6 +1184,9 @@ Procedure GenerateFeatureForRefs(Command)
 	Feature.Очистить();
 	Feature.ДобавитьСтроку(GenerateFeatureFileForRefsAtServer());
 	Items.GroupPages.CurrentPage = Items.GroupPageFeature;
+	
+	SaveBinData();
+	
 EndProcedure
 	
 &AtClient
@@ -774,10 +1194,64 @@ Procedure SelectDependentItems(Command)
 	SelectDependentItemsAtServer();
 EndProcedure
 
+&AtServer
+Procedure UpdateMetadataCountAtServer()
+    
+    Template = "SELECT SUM(1) AS Count FROM ";
+    
+    For Each MetaGroup In MetadataList.GetItems() Do
+        tmpCount = 0;
+        For Each MetaName In MetaGroup.GetItems() Do
+        
+            Query = New Query();
+            Query.Text = Template + MetaName.FullName;
+            QueryResult = Query.Execute().Select();
+            QueryResult.Next();
+            MetaName.Count = QueryResult.Count;
+            tmpCount = tmpCount + MetaName.Count;
+        EndDo;	 
+        MetaGroup.Count = tmpCount;
+    EndDo;
+EndProcedure
+
+&AtClient
+Procedure UpdateMetadataCount(Command)
+    UpdateMetadataCountAtServer();
+EndProcedure
+
+&AtClient
+Procedure SelectAll(Команда)
+	SetMarks(True);
+EndProcedure
+
+&AtClient
+Procedure DeselectAll(Команда)
+	SetMarks(False);
+EndProcedure
+
+&AtClient
+Procedure SetMarks(Value)
+	
+	For Each MetadataTypeItem In MetadataList.GetItems() Do
+		
+		MetadataTypeItem.Use = Value;
+		
+		MetadataItems = MetadataTypeItem.GetItems();
+		
+		For Each MetadataItem In MetadataItems Do
+			
+			MetadataItem.Use = Value;
+			
+		EndDo;
+		
+	EndDo;
+	
+EndProcedure
+
 &AtClient
 Procedure AddObjectByURL(Command)
-	Notify = New NotifyDescription("AddObjectByURLContinuation", ThisObject);
-	ShowInputString(Notify, "", NStr("ru = 'Введите навигационные ссылки'"), , True);	
+	Notify = New NotifyDescription("AddObjectByURLContinuation", ThisForm);
+	OpenForm(Vanessa.ПолучитьИмяОбработкиVA() + ".Форма.ВводСтрокиНавигационныхСсылок",, ThisForm,,,, Notify,  FormWindowOpeningMode.LockWholeInterface);
 EndProcedure
 
 &AtClient
@@ -875,13 +1349,15 @@ EndProcedure
 
 &AtServer
 Procedure FillMetadataType()
+	RepresentationsInLanguage = RL();
 	MetadataType.Clear();
-	MetadataType.Add("Constants", RL().s1);
-	MetadataType.Add("Catalogs", RL().s2);
-	MetadataType.Add("Documents", RL().s3);
-	MetadataType.Add("ChartsOfCharacteristicTypes", RL().s4);
-	MetadataType.Add("InformationRegisters", RL().s5);
-	MetadataType.Add("AccumulationRegisters", RL().s6);
+	MetadataType.Add("Constants", 					RepresentationsInLanguage.s1,, PictureLib.Constant);
+	MetadataType.Add("Catalogs", 					RepresentationsInLanguage.s2,, PictureLib.Catalog);
+	MetadataType.Add("Documents", 					RepresentationsInLanguage.s3,, PictureLib.Document);
+	MetadataType.Add("ChartsOfAccounts", 			RepresentationsInLanguage.s7,, PictureLib.ChartOfAccounts);
+	MetadataType.Add("ChartsOfCharacteristicTypes", RepresentationsInLanguage.s4,, PictureLib.ChartOfCharacteristicTypes);
+	MetadataType.Add("InformationRegisters", 		RepresentationsInLanguage.s5,, PictureLib.InformationRegister);
+	MetadataType.Add("AccumulationRegisters", 		RepresentationsInLanguage.s6,, PictureLib.AccumulationRegister);
 EndProcedure
 
 &AtServer
@@ -892,7 +1368,8 @@ Procedure FillMetadata()
 		MetadataListParentRow = MetadataListObject.Rows.Add();
 		MetadataListParentRow.Use = False;
 		MetadataListParentRow.Name = MetadataTypeItem.Value;
-		MetadataListParentRow.Presentation = MetadataTypeItem.Presentation;
+		MetadataListParentRow.Presentation = MetadataTypeItem.Presentation; 
+		MetadataListParentRow.Рicture =	MetadataTypeItem.Picture;
 		For Each Data In Metadata[MetadataTypeItem.Value] Do
 			MetadataListRow = MetadataListParentRow.Rows.Add();
 			MetadataListRow.Use = False;
@@ -916,10 +1393,17 @@ Procedure FillDataList(Val MetadataTypeValue, Val MetadataValue)
 	DataListValue.Columns.Clear();
 	If MetadataTypeValue = "Catalogs"
 		OR MetadataTypeValue = "Documents"
-		OR MetadataTypeValue = "ChartsOfCharacteristicTypes" Then
+		OR MetadataTypeValue = "ChartsOfCharacteristicTypes"
+		OR MetadataTypeValue = "ChartsOfAccounts" Then
 		FillColumnsByStandardAttributes(DataListValue, MetadataTypeValue, MetadataValue);
 		FillColumnsByCommonAttributes(DataListValue, MetadataTypeValue, MetadataValue);
 		FillColumnsByAttributes(DataListValue, MetadataTypeValue, MetadataValue);
+		
+		If MetadataTypeValue = "ChartsOfAccounts" Then
+			FillColumnsByAccountingFlags(DataListValue, MetadataTypeValue, MetadataValue);
+			FillColumnsByExtDimensionAccountingFlag(DataListValue, MetadataTypeValue, MetadataValue);
+		EndIf;
+
 	EndIf;
 	
 	ExistingAttributes = GetAttributes("DataList");
@@ -1168,6 +1652,24 @@ Procedure FillColumnsByResources(DataListValue, Val MetadataTypeValue, Val Metad
 EndProcedure
 
 &AtServer
+Procedure FillColumnsByAccountingFlags(DataListValue, Val MetadataTypeValue, Val MetadataValue)
+	For Each Attribute In Metadata[MetadataTypeValue][MetadataValue].AccountingFlags Do
+		AttributeType = Attribute.Type;
+		SupportedTypes = ExcludeUnsupportedType(AttributeType);
+		DataListValue.Columns.Add(Attribute.Name, SupportedTypes, Attribute.Synonym);
+	EndDo;
+EndProcedure
+
+&AtServer
+Procedure FillColumnsByExtDimensionAccountingFlag(DataListValue, Val MetadataTypeValue, Val MetadataValue)
+	For Each Attribute In Metadata[MetadataTypeValue][MetadataValue].ExtDimensionAccountingFlags Do
+		AttributeType = Attribute.Type;
+		SupportedTypes = ExcludeUnsupportedType(AttributeType);
+		DataListValue.Columns.Add("ExtDimensionAccountingFlags_" + Attribute.Name, SupportedTypes, Attribute.Synonym);
+	EndDo;
+EndProcedure
+
+&AtServer
 Procedure FillColumnsByTabularSectionAttributes(DataListValue, Val TabularSectionMetadata)
 	For Each Attribute In TabularSectionMetadata Do
 		AttributeType = Attribute.Type;
@@ -1193,6 +1695,8 @@ Function MetadataTypeValueSingle(Val MetadataTypeValue)
 		ReturnValue = "Catalog";
 	ElsIf MetadataTypeValue = "Documents" Then
 		ReturnValue = "Document";
+	ElsIf MetadataTypeValue = "ChartsOfAccounts" Then
+		ReturnValue = "ChartOfAccounts";
 	ElsIf MetadataTypeValue = "ChartsOfCharacteristicTypes" Then
 		ReturnValue = "ChartOfCharacteristicTypes";
 	ElsIf MetadataTypeValue = "InformationRegisters" Then
@@ -1213,6 +1717,8 @@ Function MetadataTypeValueMultiple(Val MetadataTypeValue)
 		ReturnValue = "Catalogs";
 	ElsIf MetadataTypeValue = "Document" Then
 		ReturnValue = "Documents";
+	ElsIf MetadataTypeValue = "ChartOfAccounts" Then
+		ReturnValue = "ChartsOfAccounts";
 	ElsIf MetadataTypeValue = "ChartOfCharacteristicTypes" Then
 		ReturnValue = "ChartsOfCharacteristicTypes";
 	ElsIf MetadataTypeValue = "InformationRegister" Then
@@ -1233,6 +1739,8 @@ Function MetadataTypeValueEnFromRu(Val MetadataTypeValue)
 		ReturnValue = "Catalog";
 	ElsIf MetadataTypeValue = "Документ" Then
 		ReturnValue = "Document";
+	ElsIf MetadataTypeValue = "ПланСчетов" Then
+		ReturnValue = "ChartOfAccounts";
 	ElsIf MetadataTypeValue = "ПланВидовХарактеристик" Then
 		ReturnValue = "ChartOfCharacteristicTypes";
 	ElsIf MetadataTypeValue = "РегистрСведений" Then
@@ -1253,6 +1761,8 @@ Function MetadataTypeValueRuFromEn(Val MetadataTypeValue)
 		ReturnValue = "Справочник";
 	ElsIf MetadataTypeValue = "Document" Then
 		ReturnValue = "Документ";
+	ElsIf MetadataTypeValue = "ChartOfAccounts" Then
+		ReturnValue = "ПланСчетов";
 	ElsIf MetadataTypeValue = "ChartOfCharacteristicTypes" Then
 		ReturnValue = "ПланВидовХарактеристик";
 	ElsIf MetadataTypeValue = "InformationRegister" Then
@@ -1269,6 +1779,9 @@ EndFunction
 
 &AtServer
 Function GetObjectLinkFromObjectURL(ObjectURL)
+	If Left(ObjectURL, 16) = "FindByAttribute:" Then
+		Return GetObjectLinkByAttributeString(ObjectURL);
+	EndIf;
 	Five = 5;
 	Nine = 9;
 	Eleven = 11;
@@ -1523,7 +2036,7 @@ Function ItIsDataForUpload(Value)
 	
 	TypeVal = TypeOf(Value);
 			
-	If TypeVal = Undefined Then
+	If TypeVal = TypeOf(Undefined) Then
 		
 		Return False;
 		
@@ -1531,7 +2044,8 @@ Function ItIsDataForUpload(Value)
 	
 	Result = (Documents.AllRefsType().ContainsType(TypeVal)
 				Or Catalogs.AllRefsType().ContainsType(TypeVal)
-				Or ChartsOfCharacteristicTypes.AllRefsType().ContainsType(TypeVal))
+				Or ChartsOfCharacteristicTypes.AllRefsType().ContainsType(TypeVal)
+				Or ChartsOfAccounts.AllRefsType().ContainsType(TypeVal))
 				
 				AND NOT Value.IsEmpty();
 				
@@ -1580,15 +2094,28 @@ Function ParseStringValue(Val ParsingValue, Val ValueType)
 		Return Result;
 	EndIf;
 	If Left(ParsingValue, 17) = "ValueStoragePath:" Then
+		
 		Path = StrReplace(ParsingValue, "ValueStoragePath:", "");
 		Path = StrReplace(Path, "$workspaceRoot", Parameters.workspaceRoot);
 		
-		Reader = New XMLReader();
-		Reader.OpenFile(Path);
-		Result = ReadXML(Reader);
-		Reader.Close();
+		For Each elem In FilesToSave Do
+			
+			If elem.Presentation = Path Then
+				
+				TempPath = GetTempFileName();
+				GetFromTempStorage(FilesToSave[0].Value).Write(TempPath);
+				
+				Reader = New XMLReader();
+				Reader.OpenFile(TempPath);
+				Result = ReadXML(Reader);
+				Reader.Close();
 		
-		Return Result;
+				Return Result;
+				
+			EndIf;
+				
+		EndDo;
+					
 	EndIf;
 	If Left(ParsingValue, 16) = "FindByAttribute:" Then
 		Return GetObjectLinkByAttributeString(ParsingValue);
@@ -1608,7 +2135,7 @@ Function ParseStringValue(Val ParsingValue, Val ValueType)
 	EndIf;
 	ValueLen = StrLen(ParsingValue);
 	If ValueLen = 36
-		And StrOccurrenceCount(ParsingValue, "-") = 4 Then
+		And ЭтоУникальныйИдентификатор(ParsingValue) Then
 		Return New UUID(ParsingValue);
 	EndIf;
 	If (ValueLen = 18 Or ValueLen = 19)
@@ -1635,19 +2162,25 @@ Procedure AddStepsByLanguage(Vanessa, AllTests, LangCode)
 	Vanessa.ДобавитьШагВМассивТестов(AllTests
 										, LocalizedStringsClient()["s2a_" + LangCode]
 										, LocalizedStringsClient()["s2b_" + LangCode]
-										, StrTemplate(ScenarioCatalogActionString(LangCode, ThisObject.UseDataExhangeLoadTrue), LocalizedStringsClient()["s2d_" + LangCode], "", "")
+										, StrTemplate(ScenarioCatalogActionString(LangCode, ThisForm.UseDataExhangeLoadTrue), LocalizedStringsClient()["s2d_" + LangCode], "", "")
 										, LocalizedStringsClient()["s2f_" + LangCode]
 										, "");
 	Vanessa.ДобавитьШагВМассивТестов(AllTests
 										, LocalizedStringsClient()["s3a_" + LangCode]
 										, LocalizedStringsClient()["s3b_" + LangCode]
-										, StrTemplate(ScenarioDocumentActionString(LangCode, ThisObject.UseDataExhangeLoadTrue), LocalizedStringsClient()["s3d_" + LangCode], "", "")
+										, StrTemplate(ScenarioDocumentActionString(LangCode, ThisForm.UseDataExhangeLoadTrue), LocalizedStringsClient()["s3d_" + LangCode], "", "")
 										, LocalizedStringsClient()["s3f_" + LangCode]
 										, "");
 	Vanessa.ДобавитьШагВМассивТестов(AllTests
+										, LocalizedStringsClient()["s17a_" + LangCode]
+										, LocalizedStringsClient()["s17b_" + LangCode]
+										, StrTemplate(ScenarioChartOfAccountsActionString(LangCode, ThisForm.UseDataExhangeLoadTrue), LocalizedStringsClient()["s17d_" + LangCode], "", "")
+										, LocalizedStringsClient()["s17f_" + LangCode]
+										, "");									
+	Vanessa.ДобавитьШагВМассивТестов(AllTests
 										, LocalizedStringsClient()["s4a_" + LangCode]
 										, LocalizedStringsClient()["s4b_" + LangCode]
-										, StrTemplate(ScenarioChartOfCharacteristicTypesActionString(LangCode, ThisObject.UseDataExhangeLoadTrue), LocalizedStringsClient()["s4d_" + LangCode], "", "")
+										, StrTemplate(ScenarioChartOfCharacteristicTypesActionString(LangCode, ThisForm.UseDataExhangeLoadTrue), LocalizedStringsClient()["s4d_" + LangCode], "", "")
 										, LocalizedStringsClient()["s4f_" + LangCode]
 										, "");
 	Vanessa.ДобавитьШагВМассивТестов(AllTests
@@ -1699,6 +2232,12 @@ Procedure AddStepsByLanguage(Vanessa, AllTests, LangCode)
 										, LocalizedStringsClient()["s14f_" + LangCode]
 										, "");
 	Vanessa.ДобавитьШагВМассивТестов(AllTests
+										, LocalizedStringsClient()["s18a_" + LangCode]
+										, LocalizedStringsClient()["s18b_" + LangCode]
+										, StrTemplate(ScenarioChartOfAccountsActionString(LangCode, True), LocalizedStringsClient()["s18d_" + LangCode], "", "")
+										, LocalizedStringsClient()["s18f_" + LangCode]
+										, "");										
+	Vanessa.ДобавитьШагВМассивТестов(AllTests
 										, LocalizedStringsClient()["s15a_" + LangCode]
 										, LocalizedStringsClient()["s15b_" + LangCode]
 										, StrTemplate(ScenarioChartOfCharacteristicTypesActionString(LangCode, True), LocalizedStringsClient()["s15d_" + LangCode], "", "")
@@ -1714,8 +2253,8 @@ EndProcedure
 
 &AtClient
 Procedure FillStepsLanguage()
-	If Not ValueIsFilled(ThisObject.StepsLanguage) Then
-		ThisObject.StepsLanguage = "en";
+	If Not ValueIsFilled(ThisForm.StepsLanguage) Then
+		ThisForm.StepsLanguage = "en";
 	EndIf;
 EndProcedure
 
@@ -1762,8 +2301,8 @@ EndFunction
 
 &AtClient
 Procedure ChangeReplaceRefByAttribute()
-	Items.MetadataListSearchAttribute.Visible = ThisObject.ReplaceRefByAttribute;
-	Items.MetadataListUseSearchByAttribute.Visible = ThisObject.ReplaceRefByAttribute;
+	Items.MetadataListSearchAttribute.Visible = ThisForm.ReplaceRefByAttribute;
+	Items.MetadataListUseSearchByAttribute.Visible = ThisForm.ReplaceRefByAttribute;
 EndProcedure
 
 &AtServer
@@ -1826,12 +2365,13 @@ EndFunction
 
 &AtServer
 Function GeneratedFeatureFile()
-	LangCode = ThisObject.StepsLanguage;
+	LangCode = ThisForm.StepsLanguage;
 	ReturnValue = New Array;	
 	Scenarious = New Array;		
 	MetadataListValue = FormAttributeToValue("MetadataList");
-	RefReplaceMetadataObjects = GetRefReplaceMetadataObjects(MetadataListValue, ThisObject.ReplaceRefByAttribute);		
+	RefReplaceMetadataObjects = GetRefReplaceMetadataObjects(MetadataListValue, ThisForm.ReplaceRefByAttribute);
 	ParamsValueStorage = ParamsValueStorageSaveToFile();
+	FilesToSave.Clear();
 	
 	For Each MetadataListParentRow In MetadataListValue.Rows Do
 		For Each MetadataListRow In MetadataListParentRow.Rows Do
@@ -1867,11 +2407,13 @@ Function GeneratedFeatureFile()
 					Continue;
 				EndIf;
 				If MetadataListParentRow.Name = "Catalogs" Then
-					Scenarious.Add(ScenarioCatalog(MetadataListRow.Name, MarkdownTables, LangCode, ThisObject.UseDataExhangeLoadTrue));
+					Scenarious.Add(ScenarioCatalog(MetadataListRow.Name, MarkdownTables, LangCode, ThisForm.UseDataExhangeLoadTrue));
 				ElsIf MetadataListParentRow.Name = "Documents" Then
-					Scenarious.Add(ScenarioDocument(MetadataListRow.Name, MarkdownTables, LangCode, ThisObject.UseDataExhangeLoadTrue));
+					Scenarious.Add(ScenarioDocument(MetadataListRow.Name, MarkdownTables, LangCode, ThisForm.UseDataExhangeLoadTrue));
+				ElsIf MetadataListParentRow.Name = "ChartsOfAccounts" Then
+					Scenarious.Add(ScenarioChartOfAccounts(MetadataListRow.Name, MarkdownTables, LangCode, ThisForm.UseDataExhangeLoadTrue));					
 				ElsIf MetadataListParentRow.Name = "ChartsOfCharacteristicTypes" Then
-					Scenarious.Add(ScenarioChartOfCharacteristicTypes(MetadataListRow.Name, MarkdownTables, LangCode, ThisObject.UseDataExhangeLoadTrue));
+					Scenarious.Add(ScenarioChartOfCharacteristicTypes(MetadataListRow.Name, MarkdownTables, LangCode, ThisForm.UseDataExhangeLoadTrue));
 				ElsIf MetadataListParentRow.Name = "InformationRegisters" Then
 					Scenarious.Add(ScenarioInformationRegister(MetadataListRow.Name, MarkdownTables, LangCode));
 				ElsIf MetadataListParentRow.Name = "AccumulationRegisters" Then
@@ -1893,7 +2435,7 @@ EndFunction
 
 &AtServer
 Function GenerateFeatureFileForRefsAtServer()	
-	LangCode = ThisObject.StepsLanguage;
+	LangCode = ThisForm.StepsLanguage;
 	ReturnValue = New Array;	
 	Scenarious = New Array;
 	AddComments = Not DontAddCommentsWithMetadataName;
@@ -1901,7 +2443,7 @@ Function GenerateFeatureFileForRefsAtServer()
 	Objects = GetRefsWithDependencies();
 	ObjectsByTypes = GroupItemsByType(Objects);
 	MetadataListValue = FormAttributeToValue("MetadataList");
-	RefReplaceMetadataObjects = GetRefReplaceMetadataObjects(MetadataListValue, ThisObject.ReplaceRefByAttribute);
+	RefReplaceMetadataObjects = GetRefReplaceMetadataObjects(MetadataListValue, ThisForm.ReplaceRefByAttribute);
 	
 	ObjectsByTypesTable = New ValueTable;
 	ObjectsByTypesTable.Columns.Add("TypePriority");
@@ -1910,6 +2452,7 @@ Function GenerateFeatureFileForRefsAtServer()
 	ObjectsByTypesTable.Columns.Add("Objects");
 	
 	ParamsValueStorage = ParamsValueStorageSaveToFile();
+	FilesToSave.Clear();
 														
 	For Each KeyValuePair In ObjectsByTypes Do
 		ObjectsOfType = KeyValuePair.Value;
@@ -1923,12 +2466,14 @@ Function GenerateFeatureFileForRefsAtServer()
 			TypePriority = 1;
 		ElsIf MetadataClass = "ChartOfCharacteristicTypes" Then
 			TypePriority = 2;
-		ElsIf MetadataClass = "InformationRegister" Then
+		ElsIf MetadataClass = "ChartOfAccounts" Then
 			TypePriority = 3;
-		ElsIf MetadataClass = "AccumulationRegister" Then
+		ElsIf MetadataClass = "InformationRegister" Then
 			TypePriority = 4;
-		ElsIf MetadataClass = "Document" Then
+		ElsIf MetadataClass = "AccumulationRegister" Then
 			TypePriority = 5;
+		ElsIf MetadataClass = "Document" Then
+			TypePriority = 6;
 		Else
 			Raise NStr("ru = 'Неподдерживаемый класс метаданных!'");
 		EndIf;
@@ -1959,11 +2504,13 @@ Function GenerateFeatureFileForRefsAtServer()
 		EndIf;
 
 		If MetadataClass = "Catalog" Then
-			ScenarioActionString = ScenarioCatalogActionString(LangCode, ThisObject.UseDataExhangeLoadTrue);
+			ScenarioActionString = ScenarioCatalogActionString(LangCode, ThisForm.UseDataExhangeLoadTrue);
 		ElsIf MetadataClass = "Document" Then
-			ScenarioActionString = ScenarioDocumentActionString(LangCode, ThisObject.UseDataExhangeLoadTrue);
+			ScenarioActionString = ScenarioDocumentActionString(LangCode, ThisForm.UseDataExhangeLoadTrue);
+		ElsIf MetadataClass = "ChartOfAccounts" Then
+			ScenarioActionString = ScenarioChartOfAccountsActionString(LangCode, ThisForm.UseDataExhangeLoadTrue);		
 		ElsIf MetadataClass = "ChartOfCharacteristicTypes" Then
-			ScenarioActionString = ScenarioChartOfCharacteristicTypesActionString(LangCode, ThisObject.UseDataExhangeLoadTrue);
+			ScenarioActionString = ScenarioChartOfCharacteristicTypesActionString(LangCode, ThisForm.UseDataExhangeLoadTrue);
 		ElsIf MetadataClass = "InformationRegister" Then
 			ScenarioActionString = ScenarioInformationRegisterActionString(LangCode);
 		ElsIf MetadataClass = "AccumulationRegister" Then
@@ -2026,6 +2573,30 @@ EndFunction
 &AtServer
 Function ScenarioCatalogActionString(LangCode, DataExchangeLoad)
 	ReturnValue = LocalizedStringsServer()[?(DataExchangeLoad, "s13c_", "s2c_") + LangCode];
+	Return ReturnValue;
+EndFunction
+
+#EndRegion
+
+#Region Scenario_ChartOfAccounts
+
+&AtServer
+Function ScenarioChartOfAccounts(MetadataName, MarkdownTables, LangCode, DataExchangeLoad)
+	Scenario = New Array;	
+	Scenario.Add(StrTemplate(LocalizedStringsServer()[?(DataExchangeLoad, "s18e_", "s17e_") + LangCode], MetadataName));
+	Scenario.Add("");
+	Scenario.Add(Chars.Tab + StrTemplate(ScenarioChartOfAccountsActionString(LangCode, DataExchangeLoad), """" + MetadataName + """", Chars.LF, MarkdownTables.ObjectDataMarkdownTable));
+	For Each DataValue In MarkdownTables.TabularSectionsDataMarkdownTables Do
+		Scenario.Add("");
+		Scenario.Add(Chars.Tab + StrTemplate(ScenarioTabularSectionActionString(LangCode), """" + DataValue.Key + """", Chars.LF, DataValue.Value));
+	EndDo;
+	Scenario.Add("");
+	Return StrConcat(Scenario, Chars.LF);
+EndFunction
+
+&AtServer
+Function ScenarioChartOfAccountsActionString(LangCode, DataExchangeLoad)
+	ReturnValue = LocalizedStringsServer()[?(DataExchangeLoad, "s18c_", "s17c_") + LangCode];
 	Return ReturnValue;
 EndFunction
 
@@ -2205,12 +2776,26 @@ Function GetMarkdownTable(Val MetadataObjectPropertyName, Val MetadataObjectName
 		For Each Column In DataTable.Columns Do
 			If isUnsupportedAttribute(Column.Name) Then
 				Continue;
-			EndIf;
+			EndIf; 			
 			Markdown.Add("|");
 			If Not TypeOf(Row[Column.Name]) = Type("Number") Then
 				Markdown.Add("'");
+			EndIf; 
+			If Column.Name = "ТипЗначения" Or Column.Name = "ValueType" Then
+                StartTmpl = "<TypeDescription xmlns=""http://v8.1c.ru/8.1/data/core"" xmlns:xs=""http://www.w3.org/2001/XMLSchema"" xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"">";
+                EndTmpl = "</TypeDescription>";
+
+                NewXMLWriter = New XMLWriter;
+                XMLWriterSettings = New XMLWriterSettings(, , False, False);
+                NewXMLWriter.SetString(XMLWriterSettings);
+                XDTOSerializer.WriteXML(NewXMLWriter, Row[Column.Name]); 
+                TypeXML = NewXMLWriter.Close(); 
+                TypeXML = StrReplace(TypeXML, StartTmpl, "");
+                TypeXML = StrReplace(TypeXML, EndTmpl, "");
+                RowData = GeValuetStringRepresentation(TypeXML, RefReplaceMetadataObjects);
+			Else
+				RowData = GeValuetStringRepresentation(Row[Column.Name], RefReplaceMetadataObjects);
 			EndIf;
-			RowData = GeValuetStringRepresentation(Row[Column.Name], RefReplaceMetadataObjects);
 			Markdown.Add(RowData);
 			If Not TypeOf(Row[Column.Name]) = Type("Number") Then
 				Markdown.Add("'");
@@ -2256,21 +2841,25 @@ Function GeValuetStringRepresentation(DataValue, RefReplaceMetadataObjects)
 					
 				EndIf;
 				
-				Path = ParamsValueStorage.PathToUpload
-						+ Name 
-						+ ".bin";
+				TempPath = GetTempFileName("bin"); 
 						
 				Writer = New XMLWriter();
-				Writer.OpenFile(Path);
+				Writer.OpenFile(TempPath);
 				Writer.WriteXMLDeclaration();
 				WriteXML(Writer, DataValue);
 				Writer.Close();
+				
+				BinData = New BinaryData(TempPath);
+				AddressTemp = PutToTempStorage(BinData);
+				DeleteFiles(TempPath);
 				
 				PathFeat = ParamsValueStorage.PathToFeature
 							+ Name      
 							+ ".bin";
 				
 				ReturnValue = "ValueStoragePath:" + PathFeat;
+				
+				FilesToSave.Add(AddressTemp, Name + ".bin");
 				
 			Else
 				
@@ -2291,6 +2880,7 @@ Function GeValuetStringRepresentation(DataValue, RefReplaceMetadataObjects)
 			ReturnValue = StrReplace(ReturnValue, Chars.LF, "\n");
 			ReturnValue = StrReplace(ReturnValue, Chars.CR, "");
 			ReturnValue = StrReplace(ReturnValue, "'", "\'");
+			ReturnValue = StrReplace(ReturnValue, "|", "\|");
 		EndIf;
 	ElsIf isMetadataObjectAndDataValueNotEmpty(MetadataObject, DataValue) Then
 		PredefinedCheck = New Structure;
@@ -2299,9 +2889,16 @@ Function GeValuetStringRepresentation(DataValue, RefReplaceMetadataObjects)
 		If PredefinedCheck.Predefined <> Undefined
 			And PredefinedCheck.Predefined Then
 			ReturnValue = GetURL(DataValue);
-			ReturnValue = Left(ReturnValue, StrFind(ReturnValue, "=") - 1)
-							+ "Name="
-							+ DataValue.PredefinedDataName;
+			If (IsCompatibilityModeVersion8_3_2OrLess()) Then
+				Manager = GetManagerByMetadataObject(MetadataObject);
+				ReturnValue = Left(ReturnValue, StrFind(ReturnValue, "=") - 1)
+								+ "Name="
+								+ Manager.GetPredefinedItemName(DataValue);
+			Else
+				ReturnValue = Left(ReturnValue, StrFind(ReturnValue, "=") - 1)
+								+ "Name="
+								+ DataValue.PredefinedDataName;
+			EndIf;
 		Else
 			If RefReplaceMetadataObjects.Count() Then
 				MetadataObjectFullName = MetadataObject.FullName();
@@ -2328,6 +2925,32 @@ Function GeValuetStringRepresentation(DataValue, RefReplaceMetadataObjects)
 	Return ReturnValue;
 EndFunction
 
+&AtServerNoContext
+Function IsCompatibilityModeVersion8_3_2OrLess()
+	
+	Try
+		CurrentCompatibilityMode = Eval("Metadata.CompatibilityMode");
+	Except
+		Return False;
+	EndTry;
+	
+	Try
+		CompatibilityMode = Metadata.ObjectProperties.CompatibilityMode;
+	Except
+		Return False;
+	EndTry;
+	
+	Versions = New Array;
+	Versions.Add(CompatibilityMode.Version8_1);
+	Versions.Add(CompatibilityMode.Version8_2_13);
+	Versions.Add(CompatibilityMode.Version8_2_16);
+	Versions.Add(CompatibilityMode.Version8_3_1);
+	Versions.Add(CompatibilityMode.Version8_3_2);
+	
+	Return (Versions.Find(CurrentCompatibilityMode) <> Undefined);
+	
+EndFunction
+
 &AtServer
 Function isMetadataObjectAndDataValueNotEmpty(MetadataObject, DataValue)
 	Return MetadataObject <> Undefined
@@ -2339,6 +2962,24 @@ Function isMetadataObjectAndDataValueNotEmpty(MetadataObject, DataValue)
 			And Not DataValue.IsEmpty();
 EndFunction
 
+&AtServer
+Function GetManagerByMetadataObject(MetadataObject) Export
+	ObjectName = MetadataObject.Name;
+	If Metadata.Catalogs.Contains(MetadataObject) Then
+		Return Catalogs[ObjectName];
+	ElsIf Metadata.Documents.Contains(MetadataObject) Then
+		Return Documents[ObjectName];
+	ElsIf Metadata.ChartsOfCharacteristicTypes.Contains(MetadataObject) Then
+		Return ChartsOfCharacteristicTypes[ObjectName];
+	ElsIf Metadata.ChartsOfAccounts.Contains(MetadataObject) Then
+		Return ChartsOfAccounts[ObjectName];
+	ElsIf Metadata.ChartsOfCalculationTypes.Contains(MetadataObject) Then
+		Return ChartsOfCalculationTypes[ObjectName];
+	Else
+		Return Undefined;
+	EndIf;
+EndFunction
+
 &AtServerNoContext
 Function isUnsupportedAttribute(AttributeName)
 	UnsupportedAttributes = New Array;
@@ -2348,8 +2989,6 @@ Function isUnsupportedAttribute(AttributeName)
 	UnsupportedAttributes.Add("Предопределенный");
 	UnsupportedAttributes.Add("PredefinedDataName");
 	UnsupportedAttributes.Add("ИмяПредопределенныхДанных");
-	UnsupportedAttributes.Add("ValueType");
-	UnsupportedAttributes.Add("ТипЗначения");
 	Return UnsupportedAttributes.Find(AttributeName) <> Undefined;
 EndFunction
 
@@ -2437,7 +3076,84 @@ EndFunction
 
 #EndRegion
 
+&AtClient
+Function FilesToUpload(Values)
+	
+	Files = New Array;
+	
+	For i = 1 to Values.Count() - 1 Do
+		
+		Row = Values[i];
+		For Each ParsingValue In Row Do
+			
+			If StrFind(ParsingValue.Value, "ValueStoragePath:") > 0 Then
+				
+				Path = StrReplace(ParsingValue.Value, "ValueStoragePath:", "");
+				Path = StrReplace(Path, "$workspaceRoot", Parameters.workspaceRoot);
+				
+				transfer = New TransferableFileDescription(Path);
+				
+				Files.Add(transfer);
+				
+			EndIf;
+			
+		EndDo;
+		
+	EndDo;
+	
+	Return Files;
+	
+EndFunction
+
+&AtClient
+Procedure UploadBinaryDataContinuation(Files, AdditionalParameters) Export
+	
+	If Files = Undefined Then
+		
+		Vanessa.ПродолжитьВыполнениеШагов(Истина, "Неудалось загрузить файлы на сервер");
+		Возврат;
+		
+	EndIf;
+	
+	FilesToSave.Clear();
+	
+	For Each File In Files Do
+		
+		FilesToSave.Add(File.Location, File.Name);
+		
+	EndDo;
+	
+	Vanessa.ПродолжитьВыполнениеШагов();
+	If AdditionalParameters.Object = "Catalog" Then
+		
+		ICheckOrCreateCatalogObjectsAtServer(AdditionalParameters.Name
+											, AdditionalParameters.Values
+											, AdditionalParameters.LoadTrue);
+											
+	ElsIf AdditionalParameters.Object = "Documents" Then
+	
+		ICheckOrCreateDocumentObjectsAtServer(AdditionalParameters.Name
+											, AdditionalParameters.Values
+											, AdditionalParameters.LoadTrue);
+	ElsIf AdditionalParameters.Object = "ChartOfAccounts" Then
+		
+		ICheckOrCreateChartOfAccountsObjectsAtServer(AdditionalParameters.Name
+											, AdditionalParameters.Values
+											, AdditionalParameters.LoadTrue);
+											
+	ElsIf AdditionalParameters.Object = "RegisterRecords" Then
+											
+		ICheckOrCreateInformationRegisterRecordsAtServer(AdditionalParameters.Name
+															, AdditionalParameters.Values
+															, AdditionalParameters.UseSet
+															, AdditionalParameters.LoadTrue);
+		
+	EndIf;	
+	
+EndProcedure
+
 #EndRegion
+
 
 #Region Localization
 
@@ -2451,6 +3167,7 @@ Function RL()
 		ReturnData.Insert("s4", "Charts of characteristic types");
 		ReturnData.Insert("s5", "Information registers");
 		ReturnData.Insert("s6", "Accumulation registers");
+		ReturnData.Insert("s7", "Chart of accounts");
 	Else	
 		ReturnData.Insert("s1", "Константы");
 		ReturnData.Insert("s2", "Справочники");
@@ -2458,6 +3175,7 @@ Function RL()
 		ReturnData.Insert("s4", "Планы видов характеристик");
 		ReturnData.Insert("s5", "Регистры сведений");
 		ReturnData.Insert("s6", "Регистры накопления");
+		ReturnData.Insert("s7", "Планы счетов");
 	EndIf;	 
 	Return ReturnData;	
 EndFunction
@@ -2477,7 +3195,7 @@ Function LocalizedStringsServer()
 	ReturnData.Insert("s1c_en", "And I run database clean");
 	ReturnData.Insert("s1c_ru", "И Я запускаю очистку базы данных");
 	ReturnData.Insert("s1d_en", "Cleans the database");
-	ReturnData.Insert("s1d_ru", "Очищает базу данных");
+	ReturnData.Insert("s1d_ru", "Очищает базу данных. Работает только в серверных базах.");
 	
 	ReturnData.Insert("s2a_en", "ICheckOrCreateCatalogObjects(ObjectName, Values)");
 	ReturnData.Insert("s2a_ru", "ЯПроверяюИлиСоздаюДляСправочникаОбъекты(ИмяОбъекта, Значения)");
@@ -2561,13 +3279,13 @@ Function LocalizedStringsServer()
 	ReturnData.Insert("s8b_ru", "ЯВыполняюКодИВставляюВПеременную");
 	ReturnData.Insert("s8c_en", "And I execute code and put to varible ""Code"" ""VaribleName""");
 	ReturnData.Insert("s8c_ru", "И я выполняю код и вставляю в переменную ""Код"" ""ИмяПеременной""");
-	ReturnData.Insert("s8d_en", "Executes code and puts to varible");
-	ReturnData.Insert("s8d_ru", "Выполняет код и вставляет в переменную");
+	ReturnData.Insert("s8d_en", "Executes code and puts to varible" + Символы.ПС + "Code is running on the server side. Context and ContextKeepable are not available");
+	ReturnData.Insert("s8d_ru", "Выполняет код и вставляет в переменную" + Символы.ПС + "Код выполняется на стороне сервера, Контекст и КонтекстСохраняемый недоступны");
 	
 	ReturnData.Insert("s9a_en", "#language: en");
 	ReturnData.Insert("s9a_ru", "#language: ru");
 	ReturnData.Insert("s9b_en", "@tree");
-	ReturnData.Insert("s9b_ru", "@дерево");
+	ReturnData.Insert("s9b_ru", "@tree");
 	ReturnData.Insert("s9c_en", "Feature: export scenarios");
 	ReturnData.Insert("s9c_ru", "Функционал: экспорт сценариев");
 	ReturnData.Insert("s9d_en", "Background:");
@@ -2609,9 +3327,9 @@ Function LocalizedStringsServer()
 	ReturnData.Insert("s12f_ru", "Создаёт записи регистра сведений, используя наборы записей");
 	
 	ReturnData.Insert("s13a_en", "ICheckOrCreateCatalogObjectsWithDataExchangeLoadTrue(ObjectName, Values)");
-	ReturnData.Insert("s13a_ru", "ЯПроверяюИлиСоздаюДляСправочникаОбъектыCОбменДаннымиЗагрузкаИстина(ИмяОбъекта, Значения)");
+	ReturnData.Insert("s13a_ru", "ЯПроверяюИлиСоздаюДляСправочникаОбъектыСОбменДаннымиЗагрузкаИстина(ИмяОбъекта, Значения)");
 	ReturnData.Insert("s13b_en", "ICheckOrCreateCatalogObjectsWithDataExchangeLoadTrue");
-	ReturnData.Insert("s13b_ru", "ЯПроверяюИлиСоздаюДляСправочникаОбъектыCОбменДаннымиЗагрузкаИстина");
+	ReturnData.Insert("s13b_ru", "ЯПроверяюИлиСоздаюДляСправочникаОбъектыСОбменДаннымиЗагрузкаИстина");
 	ReturnData.Insert("s13c_en", "And I check or create catalog %1 objects with data exchange load true:%2%3");
 	ReturnData.Insert("s13c_ru", "И я проверяю или создаю для справочника %1 объекты с обмен данными загрузка истина:%2%3");
 	ReturnData.Insert("s13d_en", """ObjectName""");
@@ -2622,9 +3340,9 @@ Function LocalizedStringsServer()
 	ReturnData.Insert("s13f_ru", "Создаёт элементы и группы справочника с ОбменДанными.Загрузка = Истина");
 	
 	ReturnData.Insert("s14a_en", "ICheckOrCreateDocumentObjectsWithDataExchangeLoadTrue(ObjectName, Values)");
-	ReturnData.Insert("s14a_ru", "ЯПроверяюИлиСоздаюДляДокументаОбъектыCОбменДаннымиЗагрузкаИстина(ИмяОбъекта, Значения)");
+	ReturnData.Insert("s14a_ru", "ЯПроверяюИлиСоздаюДляДокументаОбъектыСОбменДаннымиЗагрузкаИстина(ИмяОбъекта, Значения)");
 	ReturnData.Insert("s14b_en", "ICheckOrCreateDocumentObjectsWithDataExchangeLoadTrue");
-	ReturnData.Insert("s14b_ru", "ЯПроверяюИлиСоздаюДляДокументаОбъектыCОбменДаннымиЗагрузкаИстина");
+	ReturnData.Insert("s14b_ru", "ЯПроверяюИлиСоздаюДляДокументаОбъектыСОбменДаннымиЗагрузкаИстина");
 	ReturnData.Insert("s14c_en", "And I check or create document %1 objects with data exchange load true:%2%3");
 	ReturnData.Insert("s14c_ru", "И я проверяю или создаю для документа %1 объекты с обмен данными загрузка истина:%2%3");
 	ReturnData.Insert("s14d_en", """ObjectName""");
@@ -2635,9 +3353,9 @@ Function LocalizedStringsServer()
 	ReturnData.Insert("s14f_ru", "Создаёт документы с ОбменДанными.Загрузка = Истина");
 	
 	ReturnData.Insert("s15a_en", "ICheckOrCreateChartOfCharacteristicTypesObjectsWithDataExchangeLoadTrue(ObjectName, Values)");
-	ReturnData.Insert("s15a_ru", "ЯПроверяюИлиСоздаюДляПланаВидовХарактеристикОбъектыCОбменДаннымиЗагрузкаИстина(ИмяОбъекта, Значения)");
+	ReturnData.Insert("s15a_ru", "ЯПроверяюИлиСоздаюДляПланаВидовХарактеристикОбъектыСОбменДаннымиЗагрузкаИстина(ИмяОбъекта, Значения)");
 	ReturnData.Insert("s15b_en", "ICheckOrCreateChartOfCharacteristicTypesObjectsWithDataExchangeLoadTrue");
-	ReturnData.Insert("s15b_ru", "ЯПроверяюИлиСоздаюДляПланаВидовХарактеристикОбъектыCОбменДаннымиЗагрузкаИстина");
+	ReturnData.Insert("s15b_ru", "ЯПроверяюИлиСоздаюДляПланаВидовХарактеристикОбъектыСОбменДаннымиЗагрузкаИстина");
 	ReturnData.Insert("s15c_en", "And I check or create chart of characteristic types %1 objects with data exchange load true:%2%3");
 	ReturnData.Insert("s15c_ru", "И я проверяю или создаю для плана видов характеристик %1 объекты с обмен данными загрузка истина:%2%3");
 	ReturnData.Insert("s15d_en", """ObjectName""");
@@ -2648,9 +3366,9 @@ Function LocalizedStringsServer()
 	ReturnData.Insert("s15f_ru", "Создаёт элементы плана видов характеристик с ОбменДанными.Загрузка = Истина");
 	
 	ReturnData.Insert("s16a_en", "ICheckOrCreateInformationRegisterRecordsWithDataExchangeLoadTrue(RegisterName, Values)");
-	ReturnData.Insert("s16a_ru", "ЯПроверяюИлиСоздаюДляРегистраСведенийЗаписиCОбменДаннымиЗагрузкаИстина(ИмяРегистра, Значения)");
+	ReturnData.Insert("s16a_ru", "ЯПроверяюИлиСоздаюДляРегистраСведенийЗаписиСОбменДаннымиЗагрузкаИстина(ИмяРегистра, Значения)");
 	ReturnData.Insert("s16b_en", "ICheckOrCreateInformationRegisterRecordsWithDataExchangeLoadTrue");
-	ReturnData.Insert("s16b_ru", "ЯПроверяюИлиСоздаюДляРегистраСведенийЗаписиCОбменДаннымиЗагрузкаИстина");
+	ReturnData.Insert("s16b_ru", "ЯПроверяюИлиСоздаюДляРегистраСведенийЗаписиСОбменДаннымиЗагрузкаИстина");
 	ReturnData.Insert("s16c_en", "And I check or create information register %1 records with DataExchange.Load = True:%2%3");
 	ReturnData.Insert("s16c_ru", "И я проверяю или создаю для регистра сведений %1 записи с обмен данными загрузка истина:%2%3");
 	ReturnData.Insert("s16d_en", """RegisterName""");
@@ -2659,14 +3377,40 @@ Function LocalizedStringsServer()
 	ReturnData.Insert("s16e_ru", "Сценарий: Создание записей для регистра сведений %1 с ОбменДанными.Загрузка = Истина");
 	ReturnData.Insert("s16f_en", "Creates information register records with DataExchange.Load = True");
 	ReturnData.Insert("s16f_ru", "Создаёт записи регистра сведений с ОбменДанными.Загрузка = Истина");
+	
+	ReturnData.Insert("s17a_en", "ICheckOrCreateChartOfAccountsObjects(ObjectName, Values)");
+	ReturnData.Insert("s17a_ru", "ЯПроверяюИлиСоздаюДляПланаСчетовОбъекты(ИмяОбъекта, Значения)");
+	ReturnData.Insert("s17b_en", "ICheckOrCreateChartOfAccountsObjects");
+	ReturnData.Insert("s17b_ru", "ЯПроверяюИлиСоздаюДляПланаСчетовОбъекты");
+	ReturnData.Insert("s17c_en", "And I check or create chart of accounts %1 objects:%2%3");
+	ReturnData.Insert("s17c_ru", "И я проверяю или создаю для плана счетов %1 объекты:%2%3");
+	ReturnData.Insert("s17d_en", """ObjectName""");
+	ReturnData.Insert("s17d_ru", """ИмяОбъекта""");
+	ReturnData.Insert("s17e_en", "Scenario: Create chart of accounts %1 objects");
+	ReturnData.Insert("s17e_ru", "Сценарий: Создание объектов для плана счетов %1");
+	ReturnData.Insert("s17f_en", "Creates chart of accounts items");
+	ReturnData.Insert("s17f_ru", "Создаёт элементы плана счетов");
+	
+	ReturnData.Insert("s18a_en", "ICheckOrCreateChartOfAccountsObjectsWithDataExchangeLoadTrue(ObjectName, Values)");
+	ReturnData.Insert("s18a_ru", "ЯПроверяюИлиСоздаюДляПланаСчетовОбъектыСОбменДаннымиЗагрузкаИстина(ИмяОбъекта, Значения)");
+	ReturnData.Insert("s18b_en", "ICheckOrCreateChartOfAccountsObjectsWithDataExchangeLoadTrue");
+	ReturnData.Insert("s18b_ru", "ЯПроверяюИлиСоздаюДляПланаСчетовОбъектыСОбменДаннымиЗагрузкаИстина");
+	ReturnData.Insert("s18c_en", "And I check or create chart of accounts %1 objects with data exchange load true:%2%3");
+	ReturnData.Insert("s18c_ru", "И я проверяю или создаю для плана счетов %1 объекты с обмен данными загрузка истина:%2%3");
+	ReturnData.Insert("s18d_en", """ObjectName""");
+	ReturnData.Insert("s18d_ru", """ИмяОбъекта""");
+	ReturnData.Insert("s18e_en", "Scenario: Create chart of accounts %1 objects with DataExchange.Load = True");
+	ReturnData.Insert("s18e_ru", "Сценарий: Создание объектов для плана счетов %1 с ОбменДанными.Загрузка = Истина");
+	ReturnData.Insert("s18f_en", "Creates chart of accounts items with DataExchange.Load = True");
+	ReturnData.Insert("s18f_ru", "Создаёт элементы плана счетов с ОбменДанными.Загрузка = Истина");
 	Return ReturnData;
 EndFunction
 
 &AtServer
 Procedure ProcessReplaceRefByAttributeAtServer()
 	MetadataListValue = FormAttributeToValue("MetadataList");
-	RefReplaceMetadataObjects = GetRefReplaceMetadataObjects(MetadataListValue, ThisObject.ReplaceRefByAttribute);
-	FeatureText = ThisObject.Feature.GetText();
+	RefReplaceMetadataObjects = GetRefReplaceMetadataObjects(MetadataListValue, ThisForm.ReplaceRefByAttribute);
+	FeatureText = ThisForm.Feature.GetText();
 	Replaced = False;
 	For Each RefReplaceMetadataObject In RefReplaceMetadataObjects Do
 		Query = New Query;
@@ -2689,7 +3433,7 @@ Procedure ProcessReplaceRefByAttributeAtServer()
 		EndDo;
 	EndDo;
 	If Replaced Then
-		ThisObject.Feature.SetText(FeatureText);
+		ThisForm.Feature.SetText(FeatureText);
 	EndIf;
 EndProcedure
 
@@ -2697,6 +3441,69 @@ EndProcedure
 Procedure ProcessReplaceRefByAttribute(Command)
 	ProcessReplaceRefByAttributeAtServer();
 EndProcedure
+
+&AtServer
+Function TranslationList(Val TranslateString = "") Export
+	If КодЛокализацииИнформационнойБазы() <> "ru_RU"  Then
+		Return TranslateString;
+	EndIf;
+	Str = New Structure;
+	Str.Insert("ИмяПредопределенныхДанных", "PredefinedDataName");
+	Str.Insert("Код", "Code");
+	Str.Insert("Наименование", "Description");
+	Str.Insert("ПометкаУдаления", "DeletionMark");
+	Str.Insert("Предопределенный", "Predefined");
+	Str.Insert("Ссылка", "Ref");
+	Str.Insert("ВидДвижения", "RecordType");
+	Str.Insert("Активность", "Active");
+	Str.Insert("НомерСтроки", "LineNumber");
+	Str.Insert("Регистратор", "Recorder");
+	Str.Insert("Период", "Period");
+	Str.Insert("ТипЗначения", "ValueType");
+	Str.Insert("ЭтоГруппа", "IsFolder");
+	Str.Insert("Родитель", "Parent");
+	Str.Insert("Порядок", "Order");
+	Str.Insert("ВидыСубконто", "ExtDimensionTypes");
+	Str.Insert("ТолькоОбороты", "TurnoversOnly");
+	Str.Insert("ВидСубконто", "ExtDimensionType");
+	Str.Insert("Забалансовый", "OffBalance");
+	Str.Insert("Вид", "Type");
+	Str.Insert("Владелец", "Owner");
+	Str.Insert("ВедущиеВидыРасчета", "LeadingCalculationTypes");
+	Str.Insert("ВидРасчета", "CalculationType");
+	Str.Insert("ВытесняющиеВидыРасчета", "DisplacingCalculationTypes");
+	Str.Insert("БазовыеВидыРасчета", "BaseCalculationTypes");
+	Str.Insert("ПериодДействияБазовый", "ActionPeriodIsBasic");
+	Str.Insert("Проведен", "Posted");
+	Str.Insert("Дата", "Date");
+	Str.Insert("Номер", "Number");
+	Str.Insert("ПериодРегистрации", "RegistrationPeriod");
+	Str.Insert("Сторно", "ReversingEntry");
+	Str.Insert("БазовыйПериодКонец", "EndOfBasePeriod");
+	Str.Insert("БазовыйПериодНачало", "BegOfBasePeriod");
+	Str.Insert("ПериодДействияКонец", "EndOfActionPeriod");
+	Str.Insert("ПериодДействияНачало", "BegOfActionPeriod");
+	Str.Insert("ПериодДействия", "ActionPeriod");
+	Str.Insert("ЭтотУзел", "ThisNode");
+	Str.Insert("НомерПринятого", "ReceivedNo");
+	Str.Insert("НомерОтправленного", "SentNo");
+	Str.Insert("Стартован", "Started");
+	Str.Insert("ВедущаяЗадача", "HeadTask");
+	Str.Insert("Завершен", "Completed");
+	Str.Insert("Выполнена", "Executed");
+	Str.Insert("ТочкаМаршрута", "RoutePoint");
+	Str.Insert("БизнесПроцесс", "BusinessProcess");
+	Str.Insert("Счет", "Account");
+	Str.Insert("ПериодДействияБазовый", "ActionPeriodIsBasic");
+	
+	If IsBlankString(TranslateString) Then
+		Return Str;
+	Else
+		TrString = Undefined;
+		Str.Property(TranslateString, TrString);
+		Return ?(TrString = Undefined, TranslateString, TrString);
+	EndIf;
+EndFunction
 
 #EndRegion
 
